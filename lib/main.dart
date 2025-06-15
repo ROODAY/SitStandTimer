@@ -45,6 +45,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   int warningTime = 5; // minutes (or seconds in dev mode)
   FlutterLocalNotificationsPlugin? flutterLocalNotificationsPlugin;
   bool _didRequestPermissions = false;
+  bool warningEnabled = true;
 
   @override
   void initState() {
@@ -137,6 +138,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   }
 
   Future<void> _scheduleWarningNotification() async {
+    if (!warningEnabled) return;
     if (flutterLocalNotificationsPlugin == null) return;
     final int warnSeconds = warningTime * (useSeconds ? 1 : 60);
     final int scheduleDelay = _remainingSeconds - warnSeconds;
@@ -531,9 +533,9 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                             child: const Text('Stop'),
                           ),
                         ],
-                      ),
+                      ), // End of Row with Pause/Stop buttons
                     ],
-                  ),
+                  ), // End of Column for running state
                 )
                 : ListView(
                   children: [
@@ -609,8 +611,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                               divisions: 29,
                               label: walkMinutes.toString(),
                               onChanged:
-                                  (v) =>
-                                      setState(() => walkMinutes = v.round()),
+                                  (v) => setState(() => walkMinutes = v.round()),
                             ),
                           ),
                           Text('$walkMinutes ${useSeconds ? 'sec' : 'min'}'),
@@ -622,23 +623,40 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                           const SizedBox(width: 8),
                           DropdownButton<int>(
                             value: walkFrequency,
-                            items:
-                                List.generate(10, (i) => i + 1)
-                                    .map(
-                                      (e) => DropdownMenuItem(
-                                        value: e,
-                                        child: Text(
-                                          '$e cycle${e > 1 ? 's' : ''}',
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged:
-                                (v) => setState(() => walkFrequency = v ?? 1),
+                            items: List.generate(10, (i) => i + 1)
+                                .map((e) => DropdownMenuItem(
+                                      value: e,
+                                      child: Text('$e cycle${e > 1 ? 's' : ''}'),
+                                    ))
+                                .toList(),
+                            onChanged: (v) => setState(() => walkFrequency = v ?? 1),
                           ),
                         ],
                       ),
                     ],
+                    SwitchListTile(
+                      title: const Text('Enable Warning Notification'),
+                      value: warningEnabled,
+                      onChanged: (v) => setState(() => warningEnabled = v),
+                    ),
+                    if (warningEnabled)
+                      Row(
+                        children: [
+                          const Text('Warn before phase ends:'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Slider(
+                              value: warningTime.toDouble(),
+                              min: 1,
+                              max: useSeconds ? 30 : 30,
+                              divisions: 29,
+                              label: warningTime.toString(),
+                              onChanged: (v) => setState(() => warningTime = v.round()),
+                            ),
+                          ),
+                          Text('$warningTime ${useSeconds ? 'sec' : 'min'}'),
+                        ],
+                      ),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -647,15 +665,13 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                         const SizedBox(width: 8),
                         DropdownButton<String>(
                           value: startPhase,
-                          items: const [
-                            DropdownMenuItem(value: 'Sit', child: Text('Sit')),
-                            DropdownMenuItem(
-                              value: 'Stand',
-                              child: Text('Stand'),
-                            ),
+                          items: [
+                            const DropdownMenuItem(value: 'Sit', child: Text('Sit')),
+                            const DropdownMenuItem(value: 'Stand', child: Text('Stand')),
+                            if (walkEnabled)
+                              const DropdownMenuItem(value: 'Walk', child: Text('Walk')),
                           ],
-                          onChanged:
-                              (v) => setState(() => startPhase = v ?? 'Sit'),
+                          onChanged: (v) => setState(() => startPhase = v ?? 'Sit'),
                         ),
                       ],
                     ),
@@ -670,24 +686,6 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Text('Warn before phase ends:'),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Slider(
-                            value: warningTime.toDouble(),
-                            min: 1,
-                            max: useSeconds ? 30 : 30,
-                            divisions: 29,
-                            label: warningTime.toString(),
-                            onChanged:
-                                (v) => setState(() => warningTime = v.round()),
-                          ),
-                        ),
-                        Text('$warningTime ${useSeconds ? 'sec' : 'min'}'),
-                      ],
-                    ),
                   ],
                 ),
       ),
