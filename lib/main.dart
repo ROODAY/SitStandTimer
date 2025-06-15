@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
@@ -50,7 +53,6 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   @override
   void initState() {
     super.initState();
-    tz.initializeTimeZones();
     _initNotifications();
     // _requestNotificationPermission(); // Moved to didChangeDependencies
   }
@@ -65,6 +67,10 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   }
 
   Future<void> _initNotifications() async {
+    tz.initializeTimeZones();
+    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(currentTimeZone));
+
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -161,17 +167,14 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       );
       return;
     }
-    final scheduledTime = DateTime.now().add(Duration(seconds: scheduleDelay));
+    final scheduledTime = tz.TZDateTime.now(tz.local).add(Duration(seconds: scheduleDelay));
     // ignore: avoid_print
-    print('[DEBUG] Scheduling notification for: $scheduledTime');
+    // print('[DEBUG] Scheduling warning notification for: $scheduledTime, curTime: ${DateTime.now()}');
     await flutterLocalNotificationsPlugin!.zonedSchedule(
       0,
       'Phase ending soon',
       'Current phase ($currentPhase) will end soon. Delay?',
-      tz.TZDateTime.from(
-        scheduledTime,
-        tz.local,
-      ),
+      scheduledTime,
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'phase_warning',
@@ -188,7 +191,6 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
@@ -217,12 +219,14 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       );
       return;
     }
-    final scheduledTime = DateTime.now().add(Duration(seconds: secondsUntilSwitch));
+    final curTime = tz.TZDateTime.now(tz.local);
+    final scheduledTime = curTime.add(Duration(seconds: secondsUntilSwitch));
+    print('[DEBUG] Scheduling phase switch notification for: $scheduledTime, curTime: $curTime');
     await flutterLocalNotificationsPlugin!.zonedSchedule(
       1,
       'Phase switched',
       'It\'s time to $nextPhase!',
-      tz.TZDateTime.from(scheduledTime, tz.local),
+      scheduledTime,
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'phase_switch',
@@ -233,9 +237,9 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dateAndTime,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
@@ -248,7 +252,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       _setPhaseDuration();
     });
     _runTimer();
-    _cancelAllNotifications();
+    // _cancelAllNotifications();
     _scheduleWarningNotification();
     _schedulePhaseSwitchNotification(_getNextPhase(), _remainingSeconds);
   }
@@ -295,12 +299,10 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
 
   void _onPhaseComplete() {
     _timer?.cancel();
-    String nextPhase = _getNextPhase();
-    _schedulePhaseSwitchNotification(nextPhase, 0); // Show immediately
     _proceedToNextPhase();
     if (isRunning) {
       _runTimer();
-      _cancelAllNotifications();
+      // _cancelAllNotifications();
       _scheduleWarningNotification();
       _schedulePhaseSwitchNotification(_getNextPhase(), _remainingSeconds);
     }
@@ -358,6 +360,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
 
   void _stopTimer() {
     _timer?.cancel();
+    _cancelAllNotifications();
     setState(() {
       isRunning = false;
       isPaused = false;
