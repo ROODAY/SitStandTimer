@@ -1,5 +1,5 @@
-name: sit_stand_timer
-description: "A new Flutter project."
+name: Uptime
+description: "A simple sit/stand timer app for Android and iOS."
 publish_to: 'none'
 version: 0.1.0
 
