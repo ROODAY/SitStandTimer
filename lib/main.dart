@@ -391,133 +391,38 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       appBar: AppBar(title: const Text('Sit/Stand Timer')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            if (kDebugMode)
-              Column(
-                children: [
-                  SwitchListTile(
-                    title: const Text('Developer Mode'),
-                    value: developerMode,
-                    onChanged: (v) => setState(() => developerMode = v),
-                  ),
-                  if (developerMode)
-                    SwitchListTile(
-                      title: const Text('Use Seconds (instead of Minutes)'),
-                      value: useSeconds,
-                      onChanged: (v) => setState(() => useSeconds = v),
+        child: isRunning
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Current Phase: '
+                      '$currentPhase',
+                      style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
                     ),
-                ],
-              ),
-            Row(
-              children: [
-                const Text('Sit'),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Slider(
-                    value: sitMinutes.toDouble(),
-                    min: 5,
-                    max: 120,
-                    divisions: 23,
-                    label: sitMinutes.toString(),
-                    onChanged: isRunning ? null : (v) => setState(() => sitMinutes = v.round()),
-                  ),
-                ),
-                Text('$sitMinutes ${useSeconds ? 'sec' : 'min'}'),
-              ],
-            ),
-            Row(
-              children: [
-                const Text('Stand'),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Slider(
-                    value: standMinutes.toDouble(),
-                    min: 5,
-                    max: 120,
-                    divisions: 23,
-                    label: standMinutes.toString(),
-                    onChanged: isRunning ? null : (v) => setState(() => standMinutes = v.round()),
-                  ),
-                ),
-                Text('$standMinutes ${useSeconds ? 'sec' : 'min'}'),
-              ],
-            ),
-            SwitchListTile(
-              title: const Text('Enable Walk Phase'),
-              value: walkEnabled,
-              onChanged: isRunning ? null : (v) => setState(() => walkEnabled = v),
-            ),
-            if (walkEnabled) ...[
-              Row(
-                children: [
-                  const Text('Walk'),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Slider(
-                      value: walkMinutes.toDouble(),
-                      min: 1,
-                      max: 30,
-                      divisions: 29,
-                      label: walkMinutes.toString(),
-                      onChanged: isRunning ? null : (v) => setState(() => walkMinutes = v.round()),
-                    ),
-                  ),
-                  Text('$walkMinutes ${useSeconds ? 'sec' : 'min'}'),
-                ],
-              ),
-              Row(
-                children: [
-                  const Text('Walk every'),
-                  const SizedBox(width: 8),
-                  DropdownButton<int>(
-                    value: walkFrequency,
-                    items: List.generate(10, (i) => i + 1)
-                        .map((e) => DropdownMenuItem(value: e, child: Text('$e cycle${e > 1 ? 's' : ''}')))
-                        .toList(),
-                    onChanged: isRunning ? null : (v) => setState(() => walkFrequency = v ?? 1),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Start with:'),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: startPhase,
-                  items: const [
-                    DropdownMenuItem(value: 'Sit', child: Text('Sit')),
-                    DropdownMenuItem(value: 'Stand', child: Text('Stand')),
-                  ],
-                  onChanged: isRunning ? null : (v) => setState(() => startPhase = v ?? 'Sit'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    'Current Phase: $currentPhase',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  if (isRunning)
+                    const SizedBox(height: 32),
                     Text(
                       _formatTime(_remainingSeconds),
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
                     ),
-                  if (isRunning) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 32),
                     Wrap(
-                      spacing: 8,
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
                       children: [
                         for (var min in [5, 10, 15])
                           ElevatedButton(
                             onPressed: () => _addTimeToCurrentPhase(min * (useSeconds ? 1 : 60)),
                             child: Text('Add $min ${useSeconds ? 'sec' : 'min'}'),
+                            style: ElevatedButton.styleFrom(
+                              textStyle: const TextStyle(fontSize: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            ),
                           ),
                         ElevatedButton(
                           onPressed: () async {
@@ -555,63 +460,182 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                             }
                           },
                           child: const Text('Custom'),
+                          style: ElevatedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          ),
                         ),
                         ElevatedButton(
                           onPressed: _skipCurrentPhase,
                           child: const Text('Skip Phase'),
+                          style: ElevatedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 40),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed: isPaused ? _resumeTimer : _pauseTimer,
+                          child: Text(isPaused ? 'Resume' : 'Pause'),
+                          style: ElevatedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        ElevatedButton(
+                          onPressed: _stopTimer,
+                          child: const Text('Stop'),
+                          style: ElevatedButton.styleFrom(
+                            textStyle: const TextStyle(fontSize: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                          ),
                         ),
                       ],
                     ),
                   ],
+                ),
+              )
+            : ListView(
+                children: [
+                  if (kDebugMode)
+                    Column(
+                      children: [
+                        SwitchListTile(
+                          title: const Text('Developer Mode'),
+                          value: developerMode,
+                          onChanged: (v) => setState(() => developerMode = v),
+                        ),
+                        if (developerMode)
+                          SwitchListTile(
+                            title: const Text('Use Seconds (instead of Minutes)'),
+                            value: useSeconds,
+                            onChanged: (v) => setState(() => useSeconds = v),
+                          ),
+                      ],
+                    ),
+                  Row(
+                    children: [
+                      const Text('Sit'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Slider(
+                          value: sitMinutes.toDouble(),
+                          min: 5,
+                          max: 120,
+                          divisions: 23,
+                          label: sitMinutes.toString(),
+                          onChanged: (v) => setState(() => sitMinutes = v.round()),
+                        ),
+                      ),
+                      Text('$sitMinutes ${useSeconds ? 'sec' : 'min'}'),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Text('Stand'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Slider(
+                          value: standMinutes.toDouble(),
+                          min: 5,
+                          max: 120,
+                          divisions: 23,
+                          label: standMinutes.toString(),
+                          onChanged: (v) => setState(() => standMinutes = v.round()),
+                        ),
+                      ),
+                      Text('$standMinutes ${useSeconds ? 'sec' : 'min'}'),
+                    ],
+                  ),
+                  SwitchListTile(
+                    title: const Text('Enable Walk Phase'),
+                    value: walkEnabled,
+                    onChanged: (v) => setState(() => walkEnabled = v),
+                  ),
+                  if (walkEnabled) ...[
+                    Row(
+                      children: [
+                        const Text('Walk'),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Slider(
+                            value: walkMinutes.toDouble(),
+                            min: 1,
+                            max: 30,
+                            divisions: 29,
+                            label: walkMinutes.toString(),
+                            onChanged: (v) => setState(() => walkMinutes = v.round()),
+                          ),
+                        ),
+                        Text('$walkMinutes ${useSeconds ? 'sec' : 'min'}'),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        const Text('Walk every'),
+                        const SizedBox(width: 8),
+                        DropdownButton<int>(
+                          value: walkFrequency,
+                          items: List.generate(10, (i) => i + 1)
+                              .map((e) => DropdownMenuItem(value: e, child: Text('$e cycle${e > 1 ? 's' : ''}')))
+                              .toList(),
+                          onChanged: (v) => setState(() => walkFrequency = v ?? 1),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Start with:'),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: startPhase,
+                        items: const [
+                          DropdownMenuItem(value: 'Sit', child: Text('Sit')),
+                          DropdownMenuItem(value: 'Stand', child: Text('Stand')),
+                        ],
+                        onChanged: (v) => setState(() => startPhase = v ?? 'Sit'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: _startTimer,
+                        child: const Text('Start'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Warn before phase ends:'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Slider(
+                          value: warningTime.toDouble(),
+                          min: 1,
+                          max: useSeconds ? 30 : 30,
+                          divisions: 29,
+                          label: warningTime.toString(),
+                          onChanged: (v) => setState(() => warningTime = v.round()),
+                        ),
+                      ),
+                      Text('$warningTime ${useSeconds ? 'sec' : 'min'}'),
+                    ],
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: isRunning
-                      ? null
-                      : _startTimer,
-                  child: const Text('Start'),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: isRunning && !isPaused
-                      ? _pauseTimer
-                      : isRunning && isPaused
-                          ? _resumeTimer
-                          : null,
-                  child: Text(isPaused ? 'Resume' : 'Pause'),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: isRunning ? _stopTimer : null,
-                  child: const Text('Stop'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text('Warn before phase ends:'),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Slider(
-                    value: warningTime.toDouble(),
-                    min: 1,
-                    max: useSeconds ? 30 : 30,
-                    divisions: 29,
-                    label: warningTime.toString(),
-                    onChanged: isRunning ? null : (v) => setState(() => warningTime = v.round()),
-                  ),
-                ),
-                Text('$warningTime ${useSeconds ? 'sec' : 'min'}'),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
