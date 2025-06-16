@@ -76,6 +76,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     await flutterLocalNotificationsPlugin!.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
   }
 
@@ -149,6 +150,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       return;
     }
 
+    final String delayUnit = useSeconds ? 'sec' : 'min';
     final notificationDetails = AndroidNotificationDetails(
       'phase_warning',
       'Phase Warning',
@@ -157,8 +159,8 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       importance: Importance.max,
       priority: Priority.high,
       actions: <AndroidNotificationAction>[
-        AndroidNotificationAction('delay5', 'Delay 5'),
-        AndroidNotificationAction('delay10', 'Delay 10'),
+        AndroidNotificationAction('delay5', 'Delay 5 $delayUnit'),
+        AndroidNotificationAction('delay10', 'Delay 10 $delayUnit'),
       ],
     );
 
@@ -691,4 +693,10 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       ),
     );
   }
+}
+
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {
+  // This function is required for background notification action handling.
+  // You can add logic here if needed, or just leave it as a stub.
 }
