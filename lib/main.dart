@@ -29,7 +29,7 @@ class SitStandTimerScreen extends StatefulWidget {
   State<SitStandTimerScreen> createState() => _SitStandTimerScreenState();
 }
 
-class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
+class _SitStandTimerScreenState extends State<SitStandTimerScreen> with WidgetsBindingObserver {
   int sitMinutes = 30;
   int standMinutes = 30;
   bool walkEnabled = false;
@@ -49,12 +49,43 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   bool _didRequestPermissions = false;
   bool warningEnabled = true;
   bool keepScreenOn = false;
+  DateTime? _phaseStartTime; // Track when current phase started
+  int _phaseDurationSeconds = 0; // Total duration of current phase
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initNotifications();
     // _requestNotificationPermission(); // Moved to didChangeDependencies
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed && isRunning && !isPaused) {
+      // App came back to foreground - recalculate remaining time
+      _syncTimerWithReality();
+    }
+  }
+  
+  void _syncTimerWithReality() {
+    if (_phaseStartTime == null || _phaseDurationSeconds == 0) return;
+    
+    final now = DateTime.now();
+    final elapsed = now.difference(_phaseStartTime!).inSeconds;
+    final newRemaining = _phaseDurationSeconds - elapsed;
+    
+    if (newRemaining <= 0) {
+      // Phase should have completed - trigger it
+      _onPhaseComplete();
+    } else {
+      // Update remaining time to match reality
+      setState(() {
+        _remainingSeconds = newRemaining;
+      });
+      print('[DEBUG] Synced timer: elapsed=$elapsed, remaining=$newRemaining');
+    }
   }
 
   @override
@@ -407,15 +438,17 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     int multiplier = useSeconds ? 1 : 60;
     switch (currentPhase) {
       case 'Sit':
-        _remainingSeconds = sitMinutes * multiplier;
+        _phaseDurationSeconds = sitMinutes * multiplier;
         break;
       case 'Stand':
-        _remainingSeconds = standMinutes * multiplier;
+        _phaseDurationSeconds = standMinutes * multiplier;
         break;
       case 'Walk':
-        _remainingSeconds = walkMinutes * multiplier;
+        _phaseDurationSeconds = walkMinutes * multiplier;
         break;
     }
+    _remainingSeconds = _phaseDurationSeconds;
+    _phaseStartTime = DateTime.now(); // Record when phase started
   }
 
   void _onPhaseComplete() {
@@ -477,6 +510,11 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   void _addTimeToCurrentPhase(int seconds) {
     setState(() {
       _remainingSeconds += seconds;
+      _phaseDurationSeconds += seconds;
+      // Adjust start time to account for added time (effectively "rewinding" the clock)
+      if (_phaseStartTime != null) {
+        _phaseStartTime = _phaseStartTime!.subtract(Duration(seconds: seconds));
+      }
     });
     // Cancel and reschedule notifications to reflect new timing
     _cancelAllNotifications();
@@ -530,6 +568,10 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   }
 
   void _resumeTimer() async {
+    // Sync timer when resuming in case time passed while paused
+    if (_phaseStartTime != null) {
+      _syncTimerWithReality();
+    }
     setState(() {
       isPaused = false;
     });
@@ -603,6 +645,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     // Always disable wake lock when disposing
     WakelockPlus.disable();
