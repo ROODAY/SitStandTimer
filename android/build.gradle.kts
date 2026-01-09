@@ -3,6 +3,12 @@ allprojects {
         google()
         mavenCentral()
     }
+    
+    // Suppress Java 8 obsolete warnings from dependencies (like android_intent_plus)
+    // We use Java 17 for our code, but can't control dependency compilation
+    tasks.withType<JavaCompile>().configureEach {
+        options.compilerArgs.addAll(listOf("-Xlint:-unchecked", "-Xlint:-options"))
+    }
 }
 
 val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()

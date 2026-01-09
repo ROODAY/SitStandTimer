@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   runApp(const MainApp());
@@ -46,6 +48,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   FlutterLocalNotificationsPlugin? flutterLocalNotificationsPlugin;
   bool _didRequestPermissions = false;
   bool warningEnabled = true;
+  bool keepScreenOn = false;
 
   @override
   void initState() {
@@ -69,6 +72,36 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     tz.setLocalLocation(tz.getLocation(currentTimeZone));
 
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    
+    // Create notification channels explicitly (required for Android 8.0+)
+    const AndroidNotificationChannel phaseWarningChannel = AndroidNotificationChannel(
+      'phase_warning',
+      'Phase Warning',
+      description: 'Warn before phase ends',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+    
+    const AndroidNotificationChannel phaseSwitchChannel = AndroidNotificationChannel(
+      'phase_switch',
+      'Phase Switch',
+      description: 'Notify when phase switches',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+    
+    await flutterLocalNotificationsPlugin!
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(phaseWarningChannel);
+    
+    await flutterLocalNotificationsPlugin!
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(phaseSwitchChannel);
+    
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings =
@@ -88,9 +121,10 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     }
   }
 
-  Future<void> _requestNotificationPermission() async {
+  Future<bool> _requestNotificationPermission() async {
     final platform = Theme.of(context).platform;
     if (platform == TargetPlatform.android) {
+      // Request notification permission (required for Android 13+)
       final status = await Permission.notification.request();
       if (!status.isGranted) {
         if (mounted) {
@@ -111,53 +145,70 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                 ),
           );
         }
-        return;
+        return false;
       }
-      // Request exact alarm permission if needed
-      final alarmStatus = await Permission.scheduleExactAlarm.request();
-      if (!alarmStatus.isGranted) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder:
-                (context) => AlertDialog(
-                  title: const Text('Alarm Permission Required'),
-                  content: const Text(
-                    'Please enable exact alarm permissions in settings to receive scheduled reminders.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('OK'),
+      // Request exact alarm permission (required for Android 12+)
+      // Note: This might not be available on all devices, so we check first
+      if (await Permission.scheduleExactAlarm.isDenied) {
+        final alarmStatus = await Permission.scheduleExactAlarm.request();
+        if (!alarmStatus.isGranted && alarmStatus.isPermanentlyDenied) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder:
+                  (context) => AlertDialog(
+                    title: const Text('Alarm Permission Recommended'),
+                    content: const Text(
+                      'Exact alarm permissions are recommended for accurate reminders. You can enable it in settings.',
                     ),
-                  ],
-                ),
-          );
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+            );
+          }
         }
       }
+      return true;
     }
+    return false;
   }
 
   Future<void> _scheduleWarningNotification() async {
     if (!warningEnabled) return;
-    if (flutterLocalNotificationsPlugin == null) return;
-    final int warnSeconds = warningTime * (useSeconds ? 1 : 60);
-    final int scheduleDelay = _remainingSeconds - warnSeconds;
-    // Check permissions before scheduling
-    final notificationStatus = await Permission.notification.status;
-    final alarmStatus = await Permission.scheduleExactAlarm.status;
-    if (!notificationStatus.isGranted || !alarmStatus.isGranted) {
+    if (flutterLocalNotificationsPlugin == null) {
+      print('[ERROR] Notification plugin is null');
       return;
     }
+    final int warnSeconds = warningTime * (useSeconds ? 1 : 60);
+    final int scheduleDelay = _remainingSeconds - warnSeconds;
+    
+    // Check notification permission (required)
+    final notificationStatus = await Permission.notification.status;
+    if (!notificationStatus.isGranted) {
+      print('[ERROR] Notification permission not granted');
+      return;
+    }
+    
+    // Check exact alarm permission (recommended but not always required)
+    final alarmStatus = await Permission.scheduleExactAlarm.status;
+    final bool canScheduleExact = alarmStatus.isGranted;
+    
+    print('[DEBUG] Scheduling warning: delay=$scheduleDelay seconds, exact=$canScheduleExact');
 
     final String delayUnit = useSeconds ? 'sec' : 'min';
     final notificationDetails = AndroidNotificationDetails(
       'phase_warning',
       'Phase Warning',
-      icon: 'ic_stat_notify',
       channelDescription: 'Warn before phase ends',
       importance: Importance.max,
       priority: Priority.high,
+      icon: 'ic_stat_notify',
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 200, 100, 200]), // Short vibration pattern
       actions: <AndroidNotificationAction>[
         AndroidNotificationAction('delay5', 'Delay 5 $delayUnit'),
         AndroidNotificationAction('delay10', 'Delay 10 $delayUnit'),
@@ -174,34 +225,63 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       );
       return;
     }
+    
     final scheduledTime = tz.TZDateTime.now(
       tz.local,
     ).add(Duration(seconds: scheduleDelay));
-    // ignore: avoid_print
-    // print('[DEBUG] Scheduling warning notification for: $scheduledTime, curTime: ${DateTime.now()}');
-    await flutterLocalNotificationsPlugin!.zonedSchedule(
-      0,
-      'Phase ending soon',
-      'Current phase ($currentPhase) will end soon. Delay?',
-      scheduledTime,
-      NotificationDetails(android: notificationDetails),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
+    
+    if (kDebugMode) {
+      print('[DEBUG] Scheduling warning notification for: $scheduledTime, curTime: ${DateTime.now()}');
+    }
+    
+    // Use exact scheduling if permission is granted, otherwise use inexact
+    try {
+      await flutterLocalNotificationsPlugin!.zonedSchedule(
+        0,
+        'Phase ending soon',
+        'Current phase ($currentPhase) will end soon. Delay?',
+        scheduledTime,
+        NotificationDetails(android: notificationDetails),
+        androidScheduleMode: canScheduleExact 
+            ? AndroidScheduleMode.exactAllowWhileIdle 
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print('[DEBUG] Warning notification scheduled successfully for $scheduledTime');
+    } catch (e) {
+      print('[ERROR] Failed to schedule warning notification: $e');
+      // Fallback: show immediately if scheduling fails
+      await flutterLocalNotificationsPlugin!.show(
+        0,
+        'Phase ending soon',
+        'Current phase ($currentPhase) will end soon. Delay?',
+        NotificationDetails(android: notificationDetails),
+      );
+    }
   }
 
   Future<void> _schedulePhaseSwitchNotification(
     String nextPhase,
     int secondsUntilSwitch,
   ) async {
-    if (flutterLocalNotificationsPlugin == null) return;
-    // Check permissions before scheduling
-    final notificationStatus = await Permission.notification.status;
-    final alarmStatus = await Permission.scheduleExactAlarm.status;
-    if (!notificationStatus.isGranted || !alarmStatus.isGranted) {
+    if (flutterLocalNotificationsPlugin == null) {
+      print('[ERROR] Notification plugin is null');
       return;
     }
+    
+    // Check notification permission (required)
+    final notificationStatus = await Permission.notification.status;
+    if (!notificationStatus.isGranted) {
+      print('[ERROR] Notification permission not granted');
+      return;
+    }
+    
+    // Check exact alarm permission (recommended but not always required)
+    final alarmStatus = await Permission.scheduleExactAlarm.status;
+    final bool canScheduleExact = alarmStatus.isGranted;
+    
+    print('[DEBUG] Scheduling phase switch: nextPhase=$nextPhase, delay=$secondsUntilSwitch seconds, exact=$canScheduleExact');
 
     final notificationDetails = AndroidNotificationDetails(
       'phase_switch',
@@ -210,9 +290,13 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       importance: Importance.max,
       priority: Priority.high,
       icon: "ic_stat_notify",
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 250, 250, 250]), // Vibrate pattern: wait 0ms, vibrate 250ms, pause 250ms, vibrate 250ms
     );
 
     if (secondsUntilSwitch <= 0) {
+      // Cancel the warning notification (ID 0) when phase switch happens
+      await flutterLocalNotificationsPlugin!.cancel(0);
       await flutterLocalNotificationsPlugin!.show(
         1,
         'Phase switched',
@@ -221,22 +305,62 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       );
       return;
     }
+    
     final curTime = tz.TZDateTime.now(tz.local);
     final scheduledTime = curTime.add(Duration(seconds: secondsUntilSwitch));
-    await flutterLocalNotificationsPlugin!.zonedSchedule(
-      1,
-      'Phase switched',
-      'It\'s time to $nextPhase!',
-      scheduledTime,
-      NotificationDetails(android: notificationDetails),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dateAndTime,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
+    
+    print('[DEBUG] Scheduling phase switch notification for: $scheduledTime, nextPhase: $nextPhase');
+    
+    // Use exact scheduling if permission is granted, otherwise use inexact
+    // Note: matchDateTimeComponents is removed as it's for recurring notifications only
+    try {
+      await flutterLocalNotificationsPlugin!.zonedSchedule(
+        1,
+        'Phase switched',
+        'It\'s time to $nextPhase!',
+        scheduledTime,
+        NotificationDetails(android: notificationDetails),
+        androidScheduleMode: canScheduleExact 
+            ? AndroidScheduleMode.exactAllowWhileIdle 
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print('[DEBUG] Phase switch notification scheduled successfully for $scheduledTime (now: ${DateTime.now()})');
+    } catch (e) {
+      print('[ERROR] Failed to schedule phase switch notification: $e');
+      // Fallback: show immediately if scheduling fails
+      await flutterLocalNotificationsPlugin!.cancel(0);
+      await flutterLocalNotificationsPlugin!.show(
+        1,
+        'Phase switched',
+        'It\'s time to $nextPhase!',
+        NotificationDetails(android: notificationDetails),
+      );
+    }
+    
+    // Cancel the warning notification when phase switch is scheduled
+    // We'll also cancel it when the notification actually fires, but this helps if timing is close
+    if (secondsUntilSwitch <= 5) {
+      await flutterLocalNotificationsPlugin!.cancel(0);
+    }
   }
 
-  void _startTimer() {
+  void _startTimer() async {
+    // Ensure permissions are granted before starting
+    final hasPermission = await _requestNotificationPermission();
+    if (!hasPermission && mounted) {
+      // Show a warning but allow timer to start anyway
+      if (kDebugMode) {
+        print('[DEBUG] Starting timer without notification permissions');
+      }
+    }
+    
+    // Enable wake lock if requested
+    if (keepScreenOn) {
+      await WakelockPlus.enable();
+    }
+    
     setState(() {
       isRunning = true;
       isPaused = false;
@@ -266,13 +390,15 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!isPaused && isRunning) {
-        setState(() {
-          if (_remainingSeconds > 0) {
+        if (_remainingSeconds > 0) {
+          setState(() {
             _remainingSeconds--;
-          } else {
-            _onPhaseComplete();
-          }
-        });
+          });
+        } else {
+          // Phase complete - cancel timer first to prevent race conditions
+          timer.cancel();
+          _onPhaseComplete();
+        }
       }
     });
   }
@@ -293,14 +419,59 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
   }
 
   void _onPhaseComplete() {
+    // Cancel timer immediately to prevent race conditions
     _timer?.cancel();
-    _proceedToNextPhase();
+    
+    // Get next phase before state changes
+    final nextPhase = _getNextPhase();
+    
+    // Update phase synchronously first to prevent stuck state
+    // This must happen in setState to update the UI
+    setState(() {
+      _proceedToNextPhase();
+    });
+    
+    // Then handle async operations and restart timer
     if (isRunning) {
       _runTimer();
-      // _cancelAllNotifications();
-      _scheduleWarningNotification();
-      _schedulePhaseSwitchNotification(_getNextPhase(), _remainingSeconds);
+      // Schedule notifications asynchronously
+      _handlePhaseCompleteNotifications(nextPhase);
     }
+  }
+  
+  Future<void> _handlePhaseCompleteNotifications(String nextPhase) async {
+    // Cancel warning notification when phase completes
+    await flutterLocalNotificationsPlugin?.cancel(0);
+    
+    // Show phase switch notification immediately as fallback
+    final notificationStatus = await Permission.notification.status;
+    if (notificationStatus.isGranted && flutterLocalNotificationsPlugin != null) {
+      final notificationDetails = AndroidNotificationDetails(
+        'phase_switch',
+        'Phase Switch',
+        channelDescription: 'Notify when phase switches',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: "ic_stat_notify",
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 250, 250, 250]),
+      );
+      try {
+        await flutterLocalNotificationsPlugin!.show(
+          1,
+          'Phase switched',
+          'It\'s time to $nextPhase!',
+          NotificationDetails(android: notificationDetails),
+        );
+        print('[DEBUG] Phase switch notification shown immediately');
+      } catch (e) {
+        print('[ERROR] Failed to show phase switch notification: $e');
+      }
+    }
+    
+    // Schedule next phase notifications
+    _scheduleWarningNotification();
+    _schedulePhaseSwitchNotification(_getNextPhase(), _remainingSeconds);
   }
 
   void _addTimeToCurrentPhase(int seconds) {
@@ -317,13 +488,16 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
 
   void _skipCurrentPhase() {
     _timer?.cancel();
-    _proceedToNextPhase();
+    setState(() {
+      _proceedToNextPhase();
+    });
     if (isRunning) {
       _runTimer();
     }
   }
 
   void _proceedToNextPhase() {
+    // This method is called from within setState, so don't call setState here
     if (currentPhase == 'Sit') {
       currentPhase = 'Stand';
       _setPhaseDuration();
@@ -334,7 +508,6 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
           currentPhase = 'Walk';
           _walkCycleCounter = 0;
           _setPhaseDuration();
-          setState(() {});
           return;
         }
       }
@@ -344,24 +517,33 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       currentPhase = 'Sit';
       _setPhaseDuration();
     }
-    setState(() {});
   }
 
-  void _pauseTimer() {
+  void _pauseTimer() async {
     setState(() {
       isPaused = true;
     });
+    // Optionally disable wake lock when paused to save battery
+    if (keepScreenOn) {
+      await WakelockPlus.disable();
+    }
   }
 
-  void _resumeTimer() {
+  void _resumeTimer() async {
     setState(() {
       isPaused = false;
     });
+    // Re-enable wake lock when resuming if it was enabled
+    if (keepScreenOn) {
+      await WakelockPlus.enable();
+    }
   }
 
   void _stopTimer() {
     _timer?.cancel();
     _cancelAllNotifications();
+    // Disable wake lock when stopping
+    WakelockPlus.disable();
     setState(() {
       isRunning = false;
       isPaused = false;
@@ -374,9 +556,56 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
     flutterLocalNotificationsPlugin?.cancelAll();
   }
 
+  Future<void> _testNotification() async {
+    if (flutterLocalNotificationsPlugin == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notifications not initialized')),
+        );
+      }
+      return;
+    }
+
+    final notificationStatus = await Permission.notification.status;
+    if (!notificationStatus.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Notification permission not granted. Please grant permission first.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    const notificationDetails = AndroidNotificationDetails(
+      'phase_switch',
+      'Phase Switch',
+      channelDescription: 'Notify when phase switches',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: 'ic_stat_notify',
+    );
+
+    await flutterLocalNotificationsPlugin!.show(
+      999,
+      'Test Notification',
+      'If you see this, notifications are working!',
+      NotificationDetails(android: notificationDetails),
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test notification sent!')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    // Always disable wake lock when disposing
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -549,7 +778,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                             value: developerMode,
                             onChanged: (v) => setState(() => developerMode = v),
                           ),
-                          if (developerMode)
+                          if (developerMode) ...[
                             SwitchListTile(
                               title: const Text(
                                 'Use Seconds (instead of Minutes)',
@@ -557,6 +786,12 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                               value: useSeconds,
                               onChanged: (v) => setState(() => useSeconds = v),
                             ),
+                            ElevatedButton(
+                              onPressed: _testNotification,
+                              child: const Text('Test Notification'),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
                         ],
                       ),
                     Row(
@@ -636,6 +871,19 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
                         ],
                       ),
                     ],
+                    SwitchListTile(
+                      title: const Text('Keep Screen On'),
+                      subtitle: const Text('Prevent screen from sleeping while timer is running'),
+                      value: keepScreenOn,
+                      onChanged: (v) async {
+                        setState(() => keepScreenOn = v);
+                        if (v) {
+                          await WakelockPlus.enable();
+                        } else {
+                          await WakelockPlus.disable();
+                        }
+                      },
+                    ),
                     SwitchListTile(
                       title: const Text('Enable Warning Notification'),
                       value: warningEnabled,
