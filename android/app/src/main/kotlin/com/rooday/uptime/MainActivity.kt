@@ -1,4 +1,4 @@
-package com.example.sit_stand_timer
+package com.rooday.uptime
 
 import io.flutter.embedding.android.FlutterActivity
 

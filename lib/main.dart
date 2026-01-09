@@ -18,18 +18,18 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(home: SitStandTimerScreen());
+    return const MaterialApp(home: UptimeScreen());
   }
 }
 
-class SitStandTimerScreen extends StatefulWidget {
-  const SitStandTimerScreen({super.key});
+class UptimeScreen extends StatefulWidget {
+  const UptimeScreen({super.key});
 
   @override
-  State<SitStandTimerScreen> createState() => _SitStandTimerScreenState();
+  State<UptimeScreen> createState() => _UptimeScreenState();
 }
 
-class _SitStandTimerScreenState extends State<SitStandTimerScreen> with WidgetsBindingObserver {
+class _UptimeScreenState extends State<UptimeScreen> with WidgetsBindingObserver {
   int sitMinutes = 30;
   int standMinutes = 30;
   bool walkEnabled = false;

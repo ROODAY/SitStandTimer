@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "sit_stand_timer" "\0"
+            VALUE "FileDescription", "Uptime" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "sit_stand_timer" "\0"
+            VALUE "InternalName", "Uptime" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "sit_stand_timer.exe" "\0"
-            VALUE "ProductName", "sit_stand_timer" "\0"
+            VALUE "OriginalFilename", "uptime.exe" "\0"
+            VALUE "ProductName", "Uptime" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

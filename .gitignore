@@ -46,3 +46,6 @@ app.*.map.json
 
 # Do not commit Android signing key
 android/key.properties
+
+# Release APKs (upload to GitHub Releases instead)
+releases/

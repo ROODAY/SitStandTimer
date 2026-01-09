@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.sit_stand_timer"
+    namespace = "com.rooday.uptime"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973" // Set to match flutter_local_notifications requirement
 

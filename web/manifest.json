@@ -1,6 +1,6 @@
 {
-    "name": "sit_stand_timer",
-    "short_name": "sit_stand_timer",
+    "name": "Uptime",
+    "short_name": "Uptime",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
