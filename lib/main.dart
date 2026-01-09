@@ -206,7 +206,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       channelDescription: 'Warn before phase ends',
       importance: Importance.max,
       priority: Priority.high,
-      icon: 'ic_stat_notify',
+      icon: 'ic_stat_notify', // Notification icon (must be in drawable folder)
       enableVibration: true,
       vibrationPattern: Int64List.fromList([0, 200, 100, 200]), // Short vibration pattern
       actions: <AndroidNotificationAction>[
@@ -289,7 +289,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       channelDescription: 'Notify when phase switches',
       importance: Importance.max,
       priority: Priority.high,
-      icon: "ic_stat_notify",
+      icon: 'ic_stat_notify', // Notification icon (must be in drawable folder)
       enableVibration: true,
       vibrationPattern: Int64List.fromList([0, 250, 250, 250]), // Vibrate pattern: wait 0ms, vibrate 250ms, pause 250ms, vibrate 250ms
     );
@@ -452,7 +452,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
         channelDescription: 'Notify when phase switches',
         importance: Importance.max,
         priority: Priority.high,
-        icon: "ic_stat_notify",
+        icon: 'ic_stat_notify', // Notification icon (must be in drawable folder)
         enableVibration: true,
         vibrationPattern: Int64List.fromList([0, 250, 250, 250]),
       );
@@ -584,7 +584,7 @@ class _SitStandTimerScreenState extends State<SitStandTimerScreen> {
       channelDescription: 'Notify when phase switches',
       importance: Importance.max,
       priority: Priority.high,
-      icon: 'ic_stat_notify',
+      icon: 'ic_stat_notify', // Notification icon (must be in drawable folder)
     );
 
     await flutterLocalNotificationsPlugin!.show(
