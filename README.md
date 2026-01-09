@@ -1,6 +1,6 @@
 # Uptime
 
-A simple sit/stand timer app for Android and iOS.
+A simple sit/stand timer app for Android, iOS, and Windows.
 
 ## Building and Releasing
 
@@ -43,3 +43,60 @@ The `bump_version.ps1` script helps increment versions:
 ### Manual Version Update
 
 Just edit `version:` in `pubspec.yaml` - the build scripts will automatically use it.
+
+## Building and Testing on Windows
+
+### Prerequisites
+
+1. **Enable Windows desktop support** (if not already enabled):
+   ```powershell
+   flutter config --enable-windows-desktop
+   ```
+
+2. **Verify Windows is available**:
+   ```powershell
+   flutter devices
+   ```
+   You should see `Windows (desktop)` in the list.
+
+### Running on Windows
+
+**Run in debug mode:**
+```powershell
+flutter run -d windows
+```
+
+**Run in release mode:**
+```powershell
+flutter run -d windows --release
+```
+
+### Building Windows Executable
+
+**Debug build:**
+```powershell
+flutter build windows --debug
+```
+Output: `build\windows\x64\runner\Debug\uptime.exe`
+
+**Release build:**
+```powershell
+flutter build windows --release
+```
+Output: `build\windows\x64\runner\Release\uptime.exe`
+
+### Testing Notifications on Windows
+
+The app uses `flutter_local_notifications` which supports Windows. Notifications will appear in the Windows notification center:
+
+1. Start the timer in the app
+2. Wait for the scheduled notification time
+3. Check the Windows notification center (bottom-right corner) for notifications
+
+**Note:** Windows doesn't require notification permissions like Android, so notifications should work immediately.
+
+### Troubleshooting
+
+- If you see errors about missing Windows support, ensure you've run `flutter config --enable-windows-desktop`
+- If notifications don't appear, check Windows notification settings to ensure notifications are enabled for the app
+- The app will work the same way as on Android - notifications are scheduled and will appear at the appropriate times
